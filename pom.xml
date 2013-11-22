@@ -18,55 +18,61 @@
 			<version>2.1.4</version>
 		</dependency>
 
-        <dependency>
-            <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-transactor_2.10</artifactId>
-            <version>2.1.4</version>
-            <type>jar</type>
-        </dependency>
+		<dependency>
+			<groupId>com.typesafe.akka</groupId>
+			<artifactId>akka-transactor_2.10</artifactId>
+			<version>2.1.4</version>
+			<type>jar</type>
+		</dependency>
 
-        <dependency>
-            <groupId>joda-time</groupId>
-            <artifactId>joda-time</artifactId>
-            <version>2.3</version>
-        </dependency>
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>4.11</version>
+		</dependency>
 
-        <dependency>
-            <groupId>org.joda</groupId>
-            <artifactId>joda-convert</artifactId>
-            <scope>provided</scope>
-            <version>1.1</version>
-        </dependency>
+		<dependency>
+			<groupId>joda-time</groupId>
+			<artifactId>joda-time</artifactId>
+			<version>2.3</version>
+		</dependency>
 
-        <dependency>
-            <groupId>io.spray</groupId>
-            <artifactId>spray-routing</artifactId>
-            <version>1.1-M8</version>
-        </dependency>
+		<dependency>
+			<groupId>org.joda</groupId>
+			<artifactId>joda-convert</artifactId>
+			<scope>provided</scope>
+			<version>1.1</version>
+		</dependency>
 
-        <dependency>
-            <groupId>io.spray</groupId>
-            <artifactId>spray-httpx</artifactId>
-            <version>1.1-M8</version>
-        </dependency>
+		<dependency>
+			<groupId>io.spray</groupId>
+			<artifactId>spray-routing</artifactId>
+			<version>1.1-M8</version>
+		</dependency>
 
-        <dependency>
-            <groupId>org.scalatest</groupId>
-            <artifactId>scalatest_2.10</artifactId>
-            <version>1.9.2</version>
-        </dependency>
+		<dependency>
+			<groupId>io.spray</groupId>
+			<artifactId>spray-httpx</artifactId>
+			<version>1.1-M8</version>
+		</dependency>
 
-        <dependency>
-            <groupId>io.spray</groupId>
-            <artifactId>spray-can</artifactId>
-            <version>1.1-M8</version>
-        </dependency>
+		<dependency>
+			<groupId>org.scalatest</groupId>
+			<artifactId>scalatest_2.10</artifactId>
+			<version>1.9.2</version>
+		</dependency>
 
-        <dependency>
-            <groupId>io.spray</groupId>
-            <artifactId>spray-testkit</artifactId>
-            <version>1.1-M8</version>
-        </dependency>
+		<dependency>
+			<groupId>io.spray</groupId>
+			<artifactId>spray-can</artifactId>
+			<version>1.1-M8</version>
+		</dependency>
+
+		<dependency>
+			<groupId>io.spray</groupId>
+			<artifactId>spray-testkit</artifactId>
+			<version>1.1-M8</version>
+		</dependency>
 
 		<dependency>
 			<groupId>com.typesafe</groupId>

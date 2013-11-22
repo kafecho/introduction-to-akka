@@ -16,6 +16,13 @@ import spray.can.Http
 import org.kafecho.learning.spray.Readers._
 import spray.httpx.unmarshalling.Deserializer
 import spray.httpx.unmarshalling.MalformedContent
+import org.joda.time.DateTime
+import Writers._
+import scala.util.Failure
+import akka.actor.Status
+import akka.actor.ActorRef
+import akka.pattern.ask
+import akka.util.Timeout
 
 
 case class Namespace(prefix:String, uri: String)
@@ -55,9 +62,11 @@ case object SVC_S00_0019 extends ErrorCode("Version mismatch", Some(412) )
 
 case class Fault(code: ErrorCode, detail: Option[String])
 
-case class Description(resourceID: UUID, extensionGroup: List[Elem])
+case class Description(resourceID: UUID, extensionGroup: NodeSeq)
+
 case class BMContentCreateOrUpdate(resourceID: UUID, descriptions: List[Description])
-case class BMContent(resourceID: UUID)
+
+case class BMContent(resourceID: UUID, revisionID: Int, location: String, resourceCreationDate: DateTime, resourceModifiedDate : DateTime, descriptions: List[Description])
 
 sealed trait BMContentsElement
 case class BMContentSummary(bmContent: BMContent) extends BMContentsElement
@@ -83,6 +92,8 @@ object StartProcessType extends Enumeration{
   val StartProcessByNoWaitType, StartProcessByTimeType, StartProcessByTimeMarkType, StartProcessByServiceDefinedType = Value
 }
 
+case class Located[T](location: String, value : T)
+
 case object StartProcessByNoWait extends StartProcess
 case object StartProcessByTime extends StartProcess
 case object StopProcessByTime extends StopProcess
@@ -93,16 +104,20 @@ case object Cancel extends JobCommand
 
 case class ManageJobRequest(command: JobCommand)
 
-import Writers._
-
 object Protocols{
 
+  //def genericMarshaller[T](implicit writer: Writer[T]) : Marshaller[Located[T]] = Marshaller.delegate[Located[T], NodeSeq](MediaTypes.`application/xml`){ l => QXML.write[T](l.value)}
+  
+  
   //implicit def genericMarshaller[T](implicit writer: Writer[T]) : Marshaller[T] = Marshaller.delegate[T, NodeSeq](MediaTypes.`application/xml`){ QXML.write[T](_)}
   
   implicit val faultMarshaller : Marshaller[Fault]= Marshaller.delegate[Fault,NodeSeq](MediaTypes.`application/xml`){ QXML.write[Fault](_) }
   
   implicit val faultUnmarshaller : Unmarshaller[Fault] = Unmarshaller.delegate[NodeSeq, Fault](MediaTypes.`application/xml`){ QXML.read[Fault](_) }
-  
+
+  implicit val bmContentUnmarshaller : Unmarshaller[BMContent] = Unmarshaller.delegate[NodeSeq, BMContent](MediaTypes.`application/xml`){ QXML.read[BMContent](_) }
+
+  implicit val bmContentCreateOrUpdateMarshaller = Marshaller.delegate[BMContentCreateOrUpdate,NodeSeq](MediaTypes.`application/xml`){ QXML.write(_) }
   
   implicit val bmContentOrCreateUnmarshaller : Unmarshaller[BMContentCreateOrUpdate] = Unmarshaller.delegate[NodeSeq,BMContentCreateOrUpdate](MediaTypes.`application/xml`){nodeSeq : NodeSeq=>
     val resourceID = (nodeSeq \ "resourceID").text
@@ -124,7 +139,7 @@ object Protocols{
     JobCreate(UUID.fromString(resourceID))
   }
 
-  implicit val startProcessUnmarshaller = Unmarshaller.delegate[NodeSeq,StartProcess](MediaTypes.`application/xml`){nodeSeq : NodeSeq=>
+  implicit val startProcessUnmarshaller : Unmarshaller[StartProcess]= Unmarshaller.delegate[NodeSeq,StartProcess](MediaTypes.`application/xml`){nodeSeq : NodeSeq=>
     StartProcessByTime
   }
 
@@ -137,7 +152,7 @@ object Protocols{
     xml.copy(scope = Constants.mainScope)
   }
 
-  implicit val manageJobRequestUnmarshaller = Unmarshaller.delegate[NodeSeq,ManageJobRequest](MediaTypes.`application/xml`){nodeSeq : NodeSeq=>
+  implicit val manageJobRequestUnmarshaller : Unmarshaller[ManageJobRequest]= Unmarshaller.delegate[NodeSeq,ManageJobRequest](MediaTypes.`application/xml`){nodeSeq : NodeSeq=>
     ManageJobRequest(Stop)
   }
 }
@@ -166,6 +181,28 @@ object Converters{
   }
 }
 
+case class CreateBMContent(value: BMContentCreateOrUpdate)
+
+class ItemAlreadyExistsException(msg: String) extends Exception
+
+class ContentService(endPoint: String) extends Actor{
+
+  import scala.collection.mutable.Map
+  
+  val contents : Map[UUID, BMContent] = Map()
+  
+  def receive : Receive = {
+	  case CreateBMContent(value) => 
+	    contents.get(value.resourceID) match{
+	      case Some(content) => sender ! Status.Failure(new ItemAlreadyExistsException(s"BMContent with identifier urn:uuid:${value.resourceID} already exists."))
+	      case None =>
+	        val now = DateTime.now()
+	        sender ! BMContent(value.resourceID, 0, s"$endPoint/api/content/urn:uuid:${value.resourceID}", now, now, value.descriptions)
+	       
+	    }
+  }
+}
+
 trait FimsService extends HttpService{
   //implicit val system = ActorSystem("Test")
 
@@ -173,11 +210,26 @@ trait FimsService extends HttpService{
   import Converters._
   import PathMatchers._
 
+  def contentService: ActorRef
+
+  //def contentService = context.actorOf(Props(new ContentService("http://localhost:9000/api")))
+
+  
+  import scala.concurrent.duration._
+  
+  //the following line was missing
+  implicit def executionContext = actorRefFactory.dispatcher
+  
+  implicit val timeout = Timeout(5 seconds)
+  
+  //import spray.httpx.marshalling.MetaMarshallers.futureMarshaller
+  
   val contentApi = pathPrefix("content"){
     path(""){
       post{
         entity(as[BMContentCreateOrUpdate]){content =>
-          complete(BMContent(UUID.randomUUID))
+          val f = (contentService ? CreateBMContent(content)).mapTo[BMContent]
+          complete(f)
         }
       } ~
         parameters("skip".as[Int].?, "limit".as[Int].?, "detail".as[Detail].?){ (skip,limit, detail) =>
@@ -194,11 +246,11 @@ trait FimsService extends HttpService{
       } ~
       path( UrnEncodedUuidMatcher ){ resourceId : UUID=>
         get{
-          complete(BMContent(UUID.randomUUID))
+          complete(BMContent(UUID.randomUUID, 1, "http://localhost:9000/api/content", DateTime.now, DateTime.now, Nil))
         } ~
           post{
             entity(as[BMContentCreateOrUpdate]){content =>
-              complete(BMContent(UUID.randomUUID))
+            complete(BMContent(UUID.randomUUID, 1, "http://localhost:9000/api/content", DateTime.now, DateTime.now, content.descriptions))
             }
           } ~
           delete{
@@ -296,7 +348,7 @@ trait FimsService extends HttpService{
   }
 }
 
-class FimsServiceActor extends Actor with FimsService{
+class FimsServiceActor(val contentService: ActorRef) extends Actor with FimsService{
   def actorRefFactory = context
   def receive = runRoute(apiRoute)
 }
@@ -304,7 +356,8 @@ class FimsServiceActor extends Actor with FimsService{
 
 object FimsServiceActorTest extends App{
  implicit val system = ActorSystem("Test")
- val service = system.actorOf(Props[FimsServiceActor],"fims-service")
+ def contentService = system.actorOf(Props(new ContentService("http://localhost:9000/api")))
+ val service = system.actorOf(Props(new FimsServiceActor(contentService)),"fims-service")
  IO(Http) ! Http.Bind(service, "localhost", 8182)
 }
 
