@@ -104,58 +104,39 @@ case object Cancel extends JobCommand
 
 case class ManageJobRequest(command: JobCommand)
 
-object Protocols{
+trait Protocols{
 
-  //def genericMarshaller[T](implicit writer: Writer[T]) : Marshaller[Located[T]] = Marshaller.delegate[Located[T], NodeSeq](MediaTypes.`application/xml`){ l => QXML.write[T](l.value)}
+  import spray.httpx.marshalling.MetaMarshallers
   
+  //implicit def genericMarshaller[T](implicit writer: Writer[T]) : Marshaller[Located[T]] = Marshaller.delegate[Located[T], NodeSeq](MediaTypes.`application/xml`){ l => QXML.write[T](l.value)}
+  
+  //implicit def genericUnmarshaller[T](implicit r : Reader[T]) : Unmarshaller[T] = Unmarshaller.delegate[NodeSeq, T](MediaTypes.`application/xml`){ QXML.read[T](_) }
   
   //implicit def genericMarshaller[T](implicit writer: Writer[T]) : Marshaller[T] = Marshaller.delegate[T, NodeSeq](MediaTypes.`application/xml`){ QXML.write[T](_)}
   
   implicit val faultMarshaller : Marshaller[Fault]= Marshaller.delegate[Fault,NodeSeq](MediaTypes.`application/xml`){ QXML.write[Fault](_) }
-  
   implicit val faultUnmarshaller : Unmarshaller[Fault] = Unmarshaller.delegate[NodeSeq, Fault](MediaTypes.`application/xml`){ QXML.read[Fault](_) }
 
+  implicit val bmContentMarshaller : Marshaller[BMContent]= Marshaller.delegate[BMContent,NodeSeq](MediaTypes.`application/xml`){ QXML.write(_) }
   implicit val bmContentUnmarshaller : Unmarshaller[BMContent] = Unmarshaller.delegate[NodeSeq, BMContent](MediaTypes.`application/xml`){ QXML.read[BMContent](_) }
-
-  implicit val bmContentCreateOrUpdateMarshaller = Marshaller.delegate[BMContentCreateOrUpdate,NodeSeq](MediaTypes.`application/xml`){ QXML.write(_) }
   
-  implicit val bmContentOrCreateUnmarshaller : Unmarshaller[BMContentCreateOrUpdate] = Unmarshaller.delegate[NodeSeq,BMContentCreateOrUpdate](MediaTypes.`application/xml`){nodeSeq : NodeSeq=>
-    val resourceID = (nodeSeq \ "resourceID").text
-    BMContentCreateOrUpdate(UUID.fromString(resourceID), Nil)
-  }
+  implicit val bmContentCreateOrUpdateMarshaller = Marshaller.delegate[BMContentCreateOrUpdate,NodeSeq](MediaTypes.`application/xml`){ QXML.write(_) }
+  implicit val bmContentCreateOrUpdateUnmarshaller : Unmarshaller[BMContentCreateOrUpdate] = Unmarshaller.delegate[NodeSeq,BMContentCreateOrUpdate](MediaTypes.`application/xml`){ QXML.read[BMContentCreateOrUpdate](_) }
+  
+  implicit val bmContentsMarshaller : Marshaller[BMContents]= Marshaller.delegate[BMContents,NodeSeq](MediaTypes.`application/xml`){ QXML.write(_) }
 
-  implicit val bmContentMarshaller : Marshaller[BMContent]= Marshaller.delegate[BMContent,NodeSeq](MediaTypes.`application/xml`){ bmContent : BMContent =>
-    val xml = <bms:bmContent><bms:resourceID>urn:uuid:{bmContent.resourceID}</bms:resourceID></bms:bmContent>
-    xml.copy(scope = Constants.mainScope)
-  }
+  implicit val jobCreateUnmarshaller : Unmarshaller[JobCreate] = Unmarshaller.delegate[NodeSeq,JobCreate](MediaTypes.`application/xml`){QXML.read[JobCreate](_)}
+  
+  implicit val JobMarshaller = Marshaller.delegate[Job,NodeSeq](MediaTypes.`application/xml`){ QXML.write(_) }
+  
+  implicit val stopProcessUnmarshaller = Unmarshaller.delegate[NodeSeq,StopProcess](MediaTypes.`application/xml`) {QXML.read[StopProcess](_)}
 
-  implicit val bmContentsMarshaller : Marshaller[BMContents]= Marshaller.delegate[BMContents,NodeSeq](MediaTypes.`application/xml`){ bmContents : BMContents =>
-    val xml = <bms:bmContents totalSize={bmContents.totalSize.toString} detail={bmContents.detail.toString}></bms:bmContents>
-    xml.copy(scope = Constants.mainScope)
-  }
-
-  implicit val jobCreateUnmarshaller : Unmarshaller[JobCreate] = Unmarshaller.delegate[NodeSeq,JobCreate](MediaTypes.`application/xml`){nodeSeq : NodeSeq=>
-    val resourceID = (nodeSeq \ "resourceID").text
-    JobCreate(UUID.fromString(resourceID))
-  }
-
-  implicit val startProcessUnmarshaller : Unmarshaller[StartProcess]= Unmarshaller.delegate[NodeSeq,StartProcess](MediaTypes.`application/xml`){nodeSeq : NodeSeq=>
-    StartProcessByTime
-  }
-
-  implicit val stopProcessUnmarshaller = Unmarshaller.delegate[NodeSeq,StopProcess](MediaTypes.`application/xml`){nodeSeq : NodeSeq=>
-    StopProcessByTime
-  }
-
-  implicit val jobMarshaller : Marshaller[Job]= Marshaller.delegate[Job,NodeSeq](MediaTypes.`application/xml`){ job : Job =>
-    val xml = <bms:job><bms:resourceID>{job.resourceID}</bms:resourceID></bms:job>
-    xml.copy(scope = Constants.mainScope)
-  }
-
-  implicit val manageJobRequestUnmarshaller : Unmarshaller[ManageJobRequest]= Unmarshaller.delegate[NodeSeq,ManageJobRequest](MediaTypes.`application/xml`){nodeSeq : NodeSeq=>
-    ManageJobRequest(Stop)
-  }
+  implicit val startProcessUnmarshaller = Unmarshaller.delegate[NodeSeq, StartProcess](MediaTypes.`application/xml`){ QXML.read[StartProcess](_) }
+  
+  implicit val manageJobRequestUnmarshaller =  Unmarshaller.delegate[NodeSeq, ManageJobRequest](MediaTypes.`application/xml`){ QXML.read[ManageJobRequest](_) }
 }
+
+object Protocols extends Protocols
 
 class InvalidUrnEncodedUuidException extends Exception
 
@@ -206,7 +187,8 @@ class ContentService(endPoint: String) extends Actor{
 trait FimsService extends HttpService{
   //implicit val system = ActorSystem("Test")
 
-  import Protocols._
+  import spray.httpx.marshalling.MetaMarshallers.futureMarshaller
+  
   import Converters._
   import PathMatchers._
 
@@ -220,16 +202,18 @@ trait FimsService extends HttpService{
   //the following line was missing
   implicit def executionContext = actorRefFactory.dispatcher
   
+    import Protocols._
+
+  
   implicit val timeout = Timeout(5 seconds)
   
-  //import spray.httpx.marshalling.MetaMarshallers.futureMarshaller
   
   val contentApi = pathPrefix("content"){
     path(""){
       post{
         entity(as[BMContentCreateOrUpdate]){content =>
           val f = (contentService ? CreateBMContent(content)).mapTo[BMContent]
-          complete(f)
+          complete(StatusCodes.Created, f)
         }
       } ~
         parameters("skip".as[Int].?, "limit".as[Int].?, "detail".as[Detail].?){ (skip,limit, detail) =>

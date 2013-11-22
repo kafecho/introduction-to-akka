@@ -75,6 +75,21 @@ object Writers {
       QXmlProcessor.setNamespaceIfAbsent(xml, Constants.bms, Constants.mainScope)
     }
   }
+  
+  implicit object JobWriter extends Writer[Job]{
+    def write(value: Job) = {
+      val xml = <job><resourceID>{value.resourceID}</resourceID></job>
+      QXmlProcessor.setNamespaceIfAbsent(xml, Constants.bms, Constants.mainScope)
+    }
+  }
+  
+  implicit object BMContentsWriter extends Writer[BMContents]{
+    def write(value: BMContents) = {
+      val xml = <bmContents/>
+      QXmlProcessor.setNamespaceIfAbsent(xml, Constants.bms, Constants.mainScope)
+    }
+  }
+  
 }
 
 object Readers {
@@ -147,9 +162,26 @@ object Readers {
     }
   }
 
-  implicit object StartProcessByNoWaitReader extends Reader[StartProcessByNoWait.type] {
+  implicit object StartProcessReader extends Reader[StartProcess] {
     def read(input: NodeSeq) = StartProcessByNoWait
   }
+  
+  implicit object StopProcessReader extends Reader[StopProcess] {
+    def read(input: NodeSeq) = StopProcessByTime
+  }
+
+  implicit object JobReader extends Reader[Job]{
+    def read(input: NodeSeq) = Job(QXML.read[UUID](input \ "resourceID"))
+  }
+  
+  implicit object JobCreateReader extends Reader[JobCreate]{
+    def read(input: NodeSeq) = JobCreate(QXML.read[UUID](input \ "resourceID"))
+  }
+
+  implicit object ManageJobRequestReader extends Reader[ManageJobRequest]{
+    def read(input: NodeSeq) = ManageJobRequest(Stop)
+  }
+
 }
 
 object QXmlProcessor {

@@ -23,37 +23,37 @@ class FimsSpec extends WordSpec with ShouldMatchers with ScalatestRouteTest with
 
     "reject requests which do not contain a X-Fims-Version header with an Http 412 error" in {
       Get("/api/content") ~> apiRoute ~> check {
-        status === StatusCodes.ExpectationFailed
+        status should be(StatusCodes.PreconditionFailed)
         val fault = entityAs[Fault]
-        fault.code === SVC_S00_0019
+        fault.code should be(SVC_S00_0019)
       }
     }
 
     "reject requests which contain a X-Fims-Version header with an incorrect version with an Http 412 error" in {
       Get("/api/content") ~> addHeader("X-Fims-Version", "3.13") ~> apiRoute ~> check {
-        status == StatusCodes.ExpectationFailed
+        status should be(StatusCodes.PreconditionFailed)
         val fault = entityAs[Fault]
-        fault.code === SVC_S00_0019
+        fault.code should be(SVC_S00_0019)
       }
     }
 
     "accept requests to /api/content when provided with a valid X-Fims-Version header" in {
       Get("/api/content") ~> addHeader("X-Fims-Version", "1.1") ~> apiRoute ~> check {
-        status === StatusCodes.OK
+        status should be(StatusCodes.OK)
       }
     }
 
-//    "create a new BMContent object and return HTTP 204 with an BMContent object which contains a location link (which can be de-referenced)" in {
-//      val toCreate = BMContentCreateOrUpdate(UUID.randomUUID, Nil)
-//      Post("/api/content", toCreate) ~> apiRoute ~> check {
-//        status == StatusCodes.Accepted
-//        //          val created = entityAs[BMContent]
-//        //          header("Content-Location") match{
-//        //            case None => fail("Missing location header")
-//        //            case Some(location) =>
-//        //              location === created.location
-//        //          }
-//      }
-//    }
+    "create a new BMContent object and return HTTP 204 with an BMContent object which contains a location link (which can be de-referenced)" in {
+      val toCreate = BMContentCreateOrUpdate(UUID.randomUUID, Nil)
+      Post("/api/content", toCreate) ~> addHeader("X-Fims-Version", "1.1") ~> apiRoute ~> check {
+        status should be(StatusCodes.Created)
+        val created = entityAs[BMContent]
+        header("Content-Location") match {
+          case None => fail("Missing location header")
+          case Some(location) =>
+            location === created.location
+        }
+      }
+    }
   }
 }
